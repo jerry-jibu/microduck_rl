@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第五课 · 读曲线、抓病灶</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/quiz.js" defer></script>
+</head>
+<body>
+<header class="course">
+  <div class="kicker">Microduck RL 课程 · 第 5 课 / 共 5 课</div>
+  <h1>读曲线、抓病灶</h1>
+  <div class="meta">案例诊断课 · 约 20 分钟 · 前置：第 4 课的实验已跑过至少一次</div>
+</header>
+
+<p>训练挂上 GPU 之后，你的全部信息就只有一份 <code>training_log.csv</code> 和
+一个日志尾巴。这课教你把它读成"病历"。先看一份<b>真实病历</b>——我们冒烟训练
+的原始数据：</p>
+
+<h2>病例：runs/smoke（真实数据）</h2>
+<table>
+<tr><th>num_steps</th><th>wall_s</th><th>eval/episode_reward</th><th>判读</th></tr>
+<tr><td>0</td><td>214</td><td>6.607</td><td><b>基线</b>：折算存活 ~35 步（活着分 0.25×35 ≈ 8.8，加上少量跟踪分 − 摔倒截断）</td></tr>
+<tr><td>2 560</td><td>814</td><td>6.420</td><td><b>平台期</b>：步数太少，正常。别慌，别停，别调参。</td></tr>
+<tr><td>5 120</td><td>1 396</td><td><b>7.800</b></td><td><b>起涨</b>：+18%。存活时间变长是主因——第一个里程碑的萌芽。</td></tr>
+</table>
+<p>诊断：健康。4096 步 <b>本来就练不会走路</b>（预算表：那是 10 万步的事），
+曲线的任务只是告诉你"管线活着、方向朝上"。第 5 课的第一课眼：
+<b>先用预算表校准期望，再用曲线判断健康</b>。</p>
+
+<h2>健康曲线长什么样</h2>
+<div class="flow">
+阶段一（前 1 万步）：奖励低平 —— 鸭子在学习"别乱动"<br>
+阶段二（1 万~10 万）：episode_length 率先上涨 —— <b>里程碑：学会不摔</b><br>
+阶段三（10 万+）：reward 持续爬升 —— 站稳 + 试探性迈步<br>
+阶段四（几十万+）：reward → 1.25 × episode_length —— 稳定行走并跟速
+</div>
+<p>参照公式：<code>时长 ≈ 步数 / 3 秒 + 4 分钟</code>（本机实测）。
+10 万步 ≈ 9 小时，50 万步 ≈ 1.9 天，300 万步 ≈ 11 天（该上官方 HF Jobs 了）。</p>
+
+<h2>病灶图鉴：五种常见病</h2>
+<table>
+<tr><th>症状</th><th>病名</th><th>处方</th></tr>
+<tr><td>奖励恒 ≈ −0.75 纹丝不动</td><td>躺平刷分</td><td>鸭子全摔且拿不到正分：查摔倒率、查 <code>ALIVE_BONUS</code> 是否被你改没</td></tr>
+<tr><td>总奖励涨但存活不涨</td><td>单步刷分</td><td>网络在攒单步得分（如贴速瞬段）而非活得久：回看奖励项权重比</td></tr>
+<tr><td>惩罚项均值 &gt; 0</td><td>符号接反</td><td>八诫其一：双重否定成了奖励，立刻停训查符号</td></tr>
+<tr><td>曲线锯齿剧烈上下</td><td>学习率过大</td><td><code>--learning-rate</code> 减半重跑</td></tr>
+<tr><td>进程蒸发 / EXIT=139</td><td>显存爆了</td><td>不是病，是事故：降 <code>--num-envs</code></td></tr>
+</table>
+
+<div class="quiz" data-answer="b">
+  <span class="qno">测验 1 / 3</span>
+  <p class="q">某次训练总奖励稳步上升，但 episode_length 纹丝不动。最可能是什么？</p>
+  <div class="opts">
+    <button data-k="a">网络在钻单步得分的空子取巧</button>
+    <button data-k="b">随机种子不好需要换一个重试</button>
+    <button data-k="c">评估环境太少带来很大的噪声</button>
+  </div>
+  <div class="explain" data-good="存活不变说明『活得久』没进步，总奖励却涨——增量必然来自单步得分项（贴速瞬间的高斯分）。这是奖励字面主义的经典病例：换步长目标前先查权重比。"
+       data-bad="提示：种子和评估噪声解释的是『曲线抖』，解释不了『总涨但存活不涨』这种方向性的分裂。">
+    <span class="ref">出处：本页病灶图鉴 · AGENTS.md「the MAIN task term actually growing」</span>
+  </div>
+</div>
+
+<div class="quiz" data-answer="a">
+  <span class="qno">测验 2 / 3</span>
+  <p class="q">按本机公式估算，40 万步训练大约要跑多久？</p>
+  <div class="opts">
+    <button data-k="a">约一天半属正常范围请耐心等</button>
+    <button data-k="b">约两小时说明训练出问题该查</button>
+    <button data-k="c">约一个月说明该把规模挪上云</button>
+  </div>
+  <div class="explain" data-good="400000 ÷ 3 ≈ 133,000 s ≈ 37 小时 ≈ 一天半。先校准期望再判断健康——本机冒烟 23 分钟只能给你方向，给不了会走路。"
+       data-bad="提示：公式 = 步数/3 秒 + 4 分钟。用 40 万步代入算一遍。">
+    <span class="ref">出处：指南 §6 预算表 · <a href="../reference/command-cheatsheet.html">速查卡 · 时长预算</a></span>
+  </div>
+</div>
+
+<div class="quiz" data-answer="c">
+  <span class="qno">测验 3 / 3</span>
+  <p class="q">（穿插复习第 2 课）训练进程半夜消失，日志末尾 EXIT=139。第一步？</p>
+  <div class="opts">
+    <button data-k="a">减小并行环境数后立刻重跑一次</button>
+    <button data-k="b">重装驱动并重配整个运行的环境</button>
+    <button data-k="c">把网络隐层宽度减半再重新训练</button>
+  </div>
+  <div class="explain" data-good="139 = 段错误，本机头号嫌疑永远是显存：批量上限 ~40（32 安全）。注意别选『减网络宽度』——参数量 61→hidden 的小 MLP 根本不是显存大头，物理内核才是。"
+       data-bad="提示：这不是训练稳定性问题，是 XLA 工作集超预算。改网络结构治不了它，降批量才能。">
+    <span class="ref">出处：<a href="../reference/command-cheatsheet.html">速查卡 · 故障速诊</a> · 指南 §8</span>
+  </div>
+</div>
+
+<div class="win">
+  <span class="label">本课的动手赢面：给你的训练开一次"门诊"</span>
+  <pre><span class="cmt"># 一行抽出你那次训练的核心体征</span>
+python3 -c "
+import csv
+rows = list(csv.DictReader(open('runs/smoke/training_log.csv')))
+prev = None
+for r in rows:
+    er = float(r.get('eval/episode_reward', 'nan'))
+    d = '' if prev is None else f'({er-prev:+.2f})'
+    print(f\"steps={r['num_steps']:>7}  reward={er:7.3f}  {d}\")
+    prev = er"</pre>
+  <p style="margin:.4rem 0 0">判读三问：<b>在涨吗？涨的速度对得起预算吗？
+   有没有违反任何一条戒律的体征？</b>把答案贴给老师做门诊记录。</p>
+</div>
+
+<h2>主推资源</h2>
+<p>读曲线的<b>权威出处</b>：仓库 <code>AGENTS.md</code> 的
+"Training ops & reading a run"一节——"mean reward rising AND episode length
+behaving as the task demands"就是本课的主检指标；
+"Measure before theorizing"一节记录了三次把数据问题误诊成奖励问题的真实案例。
+课程结业后，把指南和速查卡留给下一个新人。</p>
+
+<div class="ask-teacher">
+  💬 <b>结业 checkpoint。</b>四条判据都打勾了吗（MISSION.md）？跑通了、
+  能读观测、做完了实验一、能诊断病灶——来找我领毕业作业：把你的
+  10 万步过夜训练的曲线拿来，我们做一次真正的门诊查房。
+</div>
+
+<nav class="lesson-nav">
+  <a href="0004-reward-engineering.html">← 第四课</a>
+  <a href="../index.html">课程总览</a>
+</nav>
+</body>
+</html>

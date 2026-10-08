@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第四课 · 奖励工程：一次只改一件事</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/quiz.js" defer></script>
+</head>
+<body>
+<header class="course">
+  <div class="kicker">Microduck RL 课程 · 第 4 课 / 共 5 课</div>
+  <h1>奖励工程：一次只改一件事</h1>
+  <div class="meta">实验课 · 约 10 分钟阅读 + 一晚挂机 · 前置：第 3 课</div>
+</header>
+
+<p>第 3 课你知道了鸭子看什么；这一课你决定它<b>为什么而活</b>。当前奖励是三项之和：</p>
+<pre><span class="cmt"># microduck_brax_env.py · step()</span>
+r_tracking = exp(−((实际前进速度 − 指令vx) / 0.30)²)   <span class="cmt"># 主分：贴着指令走</span>
+r_alive    = 0.25                                      <span class="cmt"># 活着就有</span>
+r_action   = −0.005 · Σ(动作变化量²)                    <span class="cmt"># 微量平滑</span></pre>
+<p>记住这个事实：<b>这三项是你接下来所有实验的操作对象</b>。动它们之前，
+先读一遍 <a href="../reference/reward-rules.html">奖励设计八诫</a>——那是官方
+团队用无数次失败训练换来的戒律，本课的每个实验都踩在其中一条上。</p>
+
+<h2>实验方法：基线 → 单变量 → 预测 → 验证</h2>
+<p>奖励实验最大的陷阱不是改错，而是<b>同时改三件事然后不知道哪件起效</b>。
+流程永远是这样：</p>
+<ol>
+<li><b>留基线</b>：<code>runs/smoke</code> 就是现成基线（6.6→6.4→7.8）。</li>
+<li><b>单变量</b>：改一个常数，只一个。<code>git diff</code> 应该只有几行。</li>
+<li><b>先写预测</b>：动笔改之前，把"我预期奖励曲线怎么变"写在
+   <code>runs/exp_名字/PREDICTION.md</code> 里。写不出预测 = 还不理解这个项。</li>
+<li><b>门禁</b>：<code>JAX_PLATFORMS=cpu python3 tests/test_brax_env_cpu.py</code>。</li>
+<li><b>跑冒烟</b>：4096 步进 <code>runs/exp_名字/</code>，与基线并排看 CSV。</li>
+<li><b>判卷</b>：预测对了吗？对→写下为什么；错→恭喜，这是最值钱的一课，
+   找老师对答案。</li>
+</ol>
+
+<h2>五连实验（按序做，每个一晚）</h2>
+<table>
+<tr><th>#</th><th>改动</th><th>我的预测（先自己写！）</th><th>踩的诫</th></tr>
+<tr><td>1</td><td><code>ALIVE_BONUS = 0.0</code></td><td>失去"不摔也有分"，早期探索更穷……还是更快学会不摔？</td><td>四：不许赖在坏状态里拿分</td></tr>
+<tr><td>2</td><td><code>TRACK_STD = 0.15</code></td><td>高斯变窄：贴不准指令的分变少，步态更激进还是直接摆烂？</td><td>七：高斯宽度=在乎的误差</td></tr>
+<tr><td>3</td><td><code>ACTION_RATE_WEIGHT = 0.05</code>（10 倍）</td><td>动作变稳、步子变小？还是干脆不动了？</td><td>五：平滑税缓征</td></tr>
+<tr><td>4</td><td>vx 从 U(0,0.6) 改成恒 0.4</td><td>任务变简单，收敛显著变快？</td><td>二：字面主义</td></tr>
+<tr><td>5</td><td>摔倒时额外 −5 分</td><td>真的能加速学会不摔吗？（官方的答案可能反直觉）</td><td>三：禁止头奖的反面</td></tr>
+</table>
+<p style="font-size:.85rem;color:var(--muted)">每个实验的完整参数说明见指南 §7；
+实验 1 的预测和判卷标准，课上讨论最热烈。</p>
+
+<div class="quiz" data-answer="a">
+  <span class="qno">测验 1 / 3</span>
+  <p class="q">训练日志里某个惩罚项的平均值变成了正数，这说明什么？</p>
+  <div class="opts">
+    <button data-k="a">惩罚项的权重符号接反成奖励</button>
+    <button data-k="b">网络已经学会完美抑制这个项</button>
+    <button data-k="c">训练轮数还不够需要继续等待</button>
+  </div>
+  <div class="explain" data-good="惩罚函数返回 ≤ 0，乘上权重后日志里仍应为负。变正 = 双重负号 = 违规被发糖，策略会主动刷违规（官方叫 butt-hopping）。每次运行都要查。"
+       data-bad="提示：网络学得再好，惩罚项的值也只是趋近零而不会变正——变正只有一种解释：符号双重否定了。">
+    <span class="ref">出处：<a href="../reference/reward-rules.html">八诫 · 其一符号纪律</a> · AGENTS.md「The infallible check」</span>
+  </div>
+</div>
+
+<div class="quiz" data-answer="a">
+  <span class="qno">测验 2 / 3</span>
+  <p class="q">"提前到达目标后每步白拿分"的陷阱，对应哪条戒律？</p>
+  <div class="opts">
+    <button data-k="a">无上限的奖励就是无上限暴力</button>
+    <button data-k="b">稀疏的奖励必然导致学习失败</button>
+    <button data-k="c">探索的熵项必须全程保持高压</button>
+  </div>
+  <div class="explain" data-good="官方教训：任何『到达 X 后开始按步给分』的设计都是头奖，会买到任意的暴力行为。解法是匀速斜坡目标——抢跑拿零分，慢才是最优。"
+       data-bad="提示：稀疏奖励和熵是另两个话题；这里说的是『一步登天后躺着拿分』的结构性缺陷。">
+    <span class="ref">出处：<a href="../reference/reward-rules.html">八诫 · 其三禁止头奖</a> · AGENTS.md「No jackpots」</span>
+  </div>
+</div>
+
+<div class="quiz" data-answer="a">
+  <span class="qno">测验 3 / 3</span>
+  <p class="q">做奖励实验时，最重要的纪律是哪一条？</p>
+  <div class="opts">
+    <button data-k="a">一次只改一个变量并保留基线</button>
+    <button data-k="b">同时改三个加速迭代发现问题</button>
+    <button data-k="c">先看别人的结果再决定改什么</button>
+  </div>
+  <div class="explain" data-good="奖励系统的因果链本来就弱信号：多变量改动让你永远无法归因。基线 + 单变量 + 先写预测，才能把『曲线变了』升级为『我知道为什么变』。"
+       data-bad="提示：多变量同时改是归因灾难——就算曲线变好，你也不知道是哪一改的功劳，下次还得盲改。">
+    <span class="ref">出处：本课实验方法节 · 指南 §7「一次只改一件事」</span>
+  </div>
+</div>
+
+<div class="win">
+  <span class="label">本课的动手赢面：启动你的第一个奖励实验</span>
+  <pre><span class="cmt"># 1. 改一个常数</span>
+sed -i 's/ALIVE_BONUS = 0.25/ALIVE_BONUS = 0.0/' microduck_brax_env.py
+git diff --stat                    <span class="cmt"># 确认只动了这一行</span>
+<span class="cmt"># 2. 门禁 + 预测 + 冒烟</span>
+JAX_PLATFORMS=cpu python3 tests/test_brax_env_cpu.py
+echo "我预测：……" &gt; runs/PREDICTION_exp1.md
+nohup python3 train_microduck_brax.py --num-timesteps 4096 \
+    --episode-length 100 --num-evals 3 --out-dir runs/exp1_no_alive \
+    &gt; runs_exp1.log 2&gt;&amp;1 &amp;
+<span class="cmt"># 3. 明早并排判卷</span>
+column -s, -t runs/smoke/training_log.csv    | less -S
+column -s, -t runs/exp1_no_alive/training_log.csv | less -S
+<span class="cmt"># 4. 恢复现场（重要！）</span>
+git checkout microduck_brax_env.py</pre>
+  <p style="margin:.4rem 0 0">把你的预测和实际结果贴给老师，一起判卷。</p>
+</div>
+
+<h2>主推资源</h2>
+<p>奖励设计的<b>权威出处</b>：仓库 <code>AGENTS.md</code> 的
+"Reward design — rules that were each learned the hard way"一节（八诫的原文）；
+理论补充：
+<a href="https://spinningup.openai.com/en/latest/spinningup/rl_intro.html#reward-hypothesis">Spinning Up · 奖励假设</a>；
+进阶读 <code>src/mjlab_microduck/tasks/mdp.py</code>——官方任务的几十项真实奖励函数全家福。</p>
+
+<div class="callout warn">
+  <span class="label">诚实边界</span>
+  本地环境是 PD 执行器 + 零域随机化的教学版。你在第 4 课学到的奖励手感
+  （怎么预测、怎么判卷）可以迁移到官方管线，但<b>具体的权重数值不能照搬</b>——
+  官方环境的奖励质量、噪声、执行器都不同（诫六：比质量不比权重）。
+</div>
+
+<div class="ask-teacher">
+  💬 <b>我是你的老师。</b>实验结果和预测不一致？那是本课最宝贵的时刻——把
+  两条 CSV 贴给我，我们一起找出你心智模型里缺的那块。
+</div>
+
+<nav class="lesson-nav">
+  <a href="0003-observations-actions.html">← 第三课</a>
+  <a href="0005-reading-curves.html">下一课：读曲线、抓病灶 →</a>
+</nav>
+</body>
+</html>

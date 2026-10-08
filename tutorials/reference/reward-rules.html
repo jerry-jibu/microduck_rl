@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>奖励设计戒律 — Microduck RL 课程</title>
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<header class="course">
+  <div class="kicker">Reference · 速查</div>
+  <h1>奖励设计八诫</h1>
+  <div class="meta">压缩自官方 AGENTS.md 的血泪教训 + 本机冒烟实测 · 做任何奖励实验前先过一遍</div>
+</header>
+
+<table>
+<tr><th style="width:2rem">#</th><th style="width:9rem">戒律</th><th>内容</th></tr>
+<tr><td>一</td><td><b>符号纪律</b></td><td>日志里任何惩罚项（Episode_Reward/*_penalty 之类）的均值必须 ≤ 0。
+   变成正数 = 权重符号接反，把惩罚写成了奖励，策略会主动"刷违规"。<b>每次运行都查。</b></td></tr>
+<tr><td>二</td><td><b>字面主义</b></td><td>RL 优化的是奖励的字面定义，不是你的意图。每个欠规定的自由度都会被钻空子
+   （甩腿代替行走、靠头撑地代替站立）。把"什么算这个动作"写进<b>硬状态门</b>（接触、朝向），
+   而不是写成小惩罚。</td></tr>
+<tr><td>三</td><td><b>禁止头奖</b></td><td>任何"达到 X 就开始每步拿分"的奖励都是头奖——策略会为提前到达目标不择手段。
+   命令类任务用<b>匀速斜坡目标</b>：抢跑拿零分，慢才是最优。</td></tr>
+<tr><td>四</td><td><b>不许对坏状态给分</b></td><td>绝不能把正奖励门控在摔倒/低高度状态上——策略会赖在最便宜的合格姿势里刷分。
+   改用势函数：只对<b>进步量</b>给分（上升给分、保持零分、无法刷）。</td></tr>
+<tr><td>五</td><td><b>平滑税缓征</b></td><td>平滑类惩罚（动作变化率）会压制探索。技能还没被发现时就征税，
+   "什么都不动"就成了最优解。顺序：先让技能出现，再逐步加平滑。</td></tr>
+<tr><td>六</td><td><b>比质量不比权重</b></td><td>把正则项从一个环境抄到另一个环境时，比较的是<b>奖励占比</b>而不是权重数值——
+   PPO 看相对优势，正栈变大 4 倍，同样的权重就稀释了 4 倍。</td></tr>
+<tr><td>七</td><td><b>高斯宽度 = 在乎的误差</b></td><td>跟踪高斯的 σ 应设为"你还希望再收敛的误差尺度"，太宽没有小误差梯度。
+   但先问：这个误差是策略能消除的，还是行为本身必然的（晃动/震荡）？
+   只给可消除的部分定价。</td></tr>
+<tr><td>八</td><td><b>先测量再开方</b></td><td>训练"失败"时，先跑无训练回放/检查 CSV 的实际数据，再改奖励。
+   官方历史上三次"失败"实际是：用了早期 checkpoint、成功判据切裂了一个行为簇、
+   上限设定对抗了实测物理。看视频 + 查数据，再动笔。</td></tr>
+</table>
+
+<div class="callout">
+  <span class="label">本环境对照</span>
+  当前奖励 = 跟踪高斯（σ=0.30，诫七）+ 活着 0.25 + 动作平滑 0.005（诫五：刻意微小）。
+  你在第 4 课要做的每个实验，都能对应到某一条戒律。
+</div>
+
+<nav class="lesson-nav">
+  <a href="obs-layout.html">← 观测布局速查</a>
+  <a href="command-cheatsheet.html">命令速查卡 →</a>
+</nav>
+</body>
+</html>

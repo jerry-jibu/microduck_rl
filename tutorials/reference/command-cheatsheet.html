@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>命令速查 — Microduck RL 课程</title>
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<header class="course">
+  <div class="kicker">Reference · 速查</div>
+  <h1>命令速查卡</h1>
+  <div class="meta">打印出来贴工位 · 全部在仓库根目录执行 · venv 需已激活（自动带 ONEAPI_DEVICE_SELECTOR）</div>
+</header>
+
+<h2>日常四连</h2>
+<pre><span class="cmt"># ① 代码冒烟：30 秒，不动 GPU。改了任何环境代码后必跑</span>
+<span class="cmd">JAX_PLATFORMS=cpu python3 tests/test_brax_env_cpu.py</span>
+
+<span class="cmt"># ② GPU 门禁：约 1 分钟，验证物理链路（期望 ~75 FPS）</span>
+<span class="cmd">python3 test_biped_mjx_batch.py 32 20 0 0</span>
+
+<span class="cmt"># ③ 训练冒烟：约 25 分钟挂后台（4096 步）</span>
+<span class="cmd">nohup python3 train_microduck_brax.py --num-timesteps 4096 \
+    --episode-length 100 --num-evals 3 --out-dir runs/smoke \
+    &gt; runs_smoke.log 2&gt;&amp;1 &amp;</span>
+<span class="cmd">tail -f runs_smoke.log</span>
+
+<span class="cmt"># ④ 看结果：曲线 + GIF</span>
+<span class="cmd">column -s, -t runs/smoke/training_log.csv | less -S</span>
+<span class="cmd">python3 rollout_microduck.py --replay runs/smoke/rollout_final.npz</span></pre>
+
+<h2>训练时长预算（实测）</h2>
+<table>
+<tr><th>num-timesteps</th><th>墙钟</th><th>预期现象</th></tr>
+<tr><td>4 096</td><td>23 分钟</td><td>管线验证；还不会走（实测 6.6→7.8 分）</td></tr>
+<tr><td>10 万</td><td>≈ 9 小时</td><td>站得更久（第一个里程碑出现）</td></tr>
+<tr><td>50 万</td><td>≈ 1.9 天</td><td>可能走出小碎步</td></tr>
+<tr><td>300 万</td><td>≈ 11 天</td><td>建议挪官方 HF Jobs，别在 A380 上硬熬</td></tr>
+</table>
+<p>公式：<code>时长 ≈ 步数 / 3 秒 + 4 分钟</code>（PPO 全链路实测 ~3 steps/s）</p>
+
+<h2>常用参数（train_microduck_brax.py）</h2>
+<table>
+<tr><th>参数</th><th>默认</th><th>含义 / 什么时候动它</th></tr>
+<tr><td><code>--num-envs</code></td><td>32</td><td>并行环境数；上限 ~40（显存），减小可省内存</td></tr>
+<tr><td><code>--episode-length</code></td><td>250</td><td>每条命最长多少步（250 = 5 s）；调小可加速 eval</td></tr>
+<tr><td><code>--learning-rate</code></td><td>3e-4</td><td>步长；训练发散（奖励崩）时减半</td></tr>
+<tr><td><code>--entropy-cost</code></td><td>5e-3</td><td>探索力度；行为太呆可加，太疯可减</td></tr>
+<tr><td><code>--num-evals</code></td><td>5</td><td>中途评估次数；每次评估都花真实环境步数</td></tr>
+<tr><td><code>--out-dir</code></td><td>带时间戳</td><td>产物目录；实验命名规范见第 4 课</td></tr>
+</table>
+
+<h2>故障速诊</h2>
+<table>
+<tr><th>症状</th><th>一句诊断</th><th>处方</th></tr>
+<tr><td>进程消失 / <code>EXIT=139</code></td><td>显存爆了</td><td>降 <code>--num-envs</code></td></tr>
+<tr><td><code>RESOURCE_EXHAUSTED</code></td><td>同上</td><td>同上</td></tr>
+<tr><td><code>Too many colons</code> 后崩溃</td><td>selector 三段式写法</td><td>用 <code>level_zero:0</code></td></tr>
+<tr><td><code>target: Xe1</code> 编译失败</td><td>跑到核显上了</td><td>确认 selector，重开终端</td></tr>
+<tr><td>第一步卡几分钟</td><td>XLA 编译（正常）</td><td>等，<code>tail -f</code> 盯着</td></tr>
+<tr><td>GIF 只有地板没鸭子</td><td>相机没跟踪</td><td>用自带 <code>side</code> 相机（已配好）</td></tr>
+<tr><td>奖励恒 ≈ -0.75 不动</td><td>鸭子全摔躺着刷分</td><td>查 <code>ALIVE_BONUS</code> 改动与摔倒率</td></tr>
+</table>
+
+<p>完整版：<a href="../../docs/intel_arc_a380_guide.md">docs/intel_arc_a380_guide.md</a> §10</p>
+
+<nav class="lesson-nav">
+  <a href="glossary.html">← 术语表</a>
+  <a href="../lessons/0002-first-training-run.html">第二课 →</a>
+</nav>
+</body>
+</html>

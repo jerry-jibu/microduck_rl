@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>术语表 — Microduck RL 课程</title>
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<header class="course">
+  <div class="kicker">Reference · 速查</div>
+  <h1>术语表</h1>
+  <div class="meta">按概念分组 · 中文一句话定义 · 标注在本仓库的位置 · 各课统一沿用此表</div>
+</header>
+
+<h2>强化学习（RL）</h2>
+<table>
+<tr><th style="width:11rem">术语</th><th>一句话定义</th><th style="width:14rem">在本仓库</th></tr>
+<tr><td><b>策略</b> policy</td><td>读观测、输出动作的神经网络；训练就是调它的参数</td><td><code>params.pkl</code></td></tr>
+<tr><td><b>观测</b> observation</td><td>策略每一步"看到"的向量；本鸭子是 61 维</td><td><code>microduck_brax_env.py</code> <code>_get_obs</code></td></tr>
+<tr><td><b>动作</b> action</td><td>策略输出的控制量；本鸭子是 14 个关节的目标偏移</td><td><code>step()</code></td></tr>
+<tr><td><b>奖励</b> reward</td><td>每个动作的即时评分，正负皆有；总奖励越高行为越好</td><td><code>step()</code> 里 <code>r_tracking + r_alive + r_action_rate</code></td></tr>
+<tr><td><b>回合</b> episode</td><td>从 reset 到摔倒/到时限的一条"命"</td><td><code>episode_length</code> 参数</td></tr>
+<tr><td><b>PPO</b></td><td>最常用的策略梯度算法；brax 自带实现</td><td><code>train_microduck_brax.py</code></td></tr>
+<tr><td><b>checkpoint</b></td><td>某一步训练后策略参数的存档</td><td><code>runs/*/params*.pkl</code></td></tr>
+</table>
+
+<h2>仿真栈</h2>
+<table>
+<tr><th style="width:11rem">术语</th><th>一句话定义</th><th style="width:14rem">备注</th></tr>
+<tr><td><b>MJCF</b></td><td>MuJoCo 的 XML 机器人描述格式（关节、质量、碰撞体）</td><td><code>scene_walk_mjx.xml</code></td></tr>
+<tr><td><b>MuJoCo</b></td><td>物理引擎，读 MJCF 后模拟刚体动力学</td><td>本机 3.15</td></tr>
+<tr><td><b>MJX</b></td><td>MuJoCo 的 JAX 后端：物理计算编译成 GPU 代码</td><td><code>mujoco.mjx</code></td></tr>
+<tr><td><b>JAX / XLA</b></td><td>数组计算框架及其编译器；首次运行要编译，慢是正常</td><td>本机 0.11.2</td></tr>
+<tr><td><b>oneAPI 后端</b></td><td>让 XLA 生成 Intel GPU 机器码的实验性插件</td><td>必须 <code>ONEAPI_DEVICE_SELECTOR=level_zero:0</code></td></tr>
+<tr><td><b>Brax</b></td><td>基于 JAX 的 RL 库：环境基类 + PPO + 包装器</td><td>本机 0.14.2</td></tr>
+<tr><td><b>jit / vmap / scan</b></td><td>JAX 三件套：编译、批量并行、循环；brax 靠它们跑 32 环境</td><td>JAX 文档</td></tr>
+</table>
+
+<h2>机器人本体</h2>
+<table>
+<tr><th style="width:11rem">术语</th><th>一句话定义</th><th style="width:14rem">备注</th></tr>
+<tr><td><b>自由关节</b> free joint</td><td>躯干与世界的 6 自由度连接（3 平移 + 3 旋转）</td><td><code>qpos[0:7]</code> 位置+四元数</td></tr>
+<tr><td><b>舵机</b> servo</td><td>XL330 关节电机，14 个；内部有位置环</td><td><code>qpos[7:21]</code></td></tr>
+<tr><td><b>IMU</b></td><td>惯性测量单元：角速度 + 加速度 + 姿态</td><td><code>imu</code> site，机体系</td></tr>
+<tr><td><b>重力投影</b> projected gravity</td><td>世界重力方向投影到机身坐标；直立 = (0,0,-1)，是"倾斜计"</td><td>obs 第 31-33 维</td></tr>
+<tr><td><b>frame 语义</b></td><td>向量在哪个坐标系：<code>qvel[0:3]</code> 世界系，<code>qvel[3:6]</code> 机体系（已实测）</td><td>勿混用</td></tr>
+<tr><td><b>BAM</b></td><td>官方的 XL330 电压级执行器模型（反电动势+摩擦+电压跌落）</td><td>本地 v0 未移植，用 PD 代替</td></tr>
+<tr><td><b>位置伺服</b> position servo</td><td>给定目标角度，内部 PD 控制器发力去追（kp=50）</td><td>XML <code>&lt;position&gt;</code></td></tr>
+</table>
+
+<h2>训练工程</h2>
+<table>
+<tr><th style="width:11rem">术语</th><th>一句话定义</th><th style="width:14rem">备注</th></tr>
+<tr><td><b>域随机化</b> DR</td><td>训练时随机扰动摩擦/质量等参数，逼策略学会鲁棒</td><td>官方有，本地 v0 没有</td></tr>
+<tr><td><b>sim2real</b></td><td>仿真里学的策略搬到真机；差异越大越容易翻车</td><td>本地策略<b>不能</b>上真机</td></tr>
+<tr><td><b>奖励黑客</b> reward hacking</td><td>网络钻奖励定义的空子拿分而不做正事</td><td>AGENTS.md 戒律</td></tr>
+<tr><td><b>凸包</b> convex hull</td><td>把网格包起来的最小凸体；MJX 碰撞用它，顶点越多越贵</td><td>盒脚变体的由来</td></tr>
+<tr><td><b>回合奖励</b> episode reward</td><td>一整条命攒下的总奖励；训练健康度的首要指标</td><td><code>training_log.csv</code></td></tr>
+</table>
+
+<nav class="lesson-nav">
+  <a href="../lessons/0001-what-is-robot-rl.html">← 第一课</a>
+  <a href="../lessons/0002-first-training-run.html">第二课 →</a>
+</nav>
+</body>
+</html>

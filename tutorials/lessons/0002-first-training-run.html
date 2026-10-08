@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第二课 · 跑通你的第一条训练管线</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/quiz.js" defer></script>
+</head>
+<body>
+<header class="course">
+  <div class="kicker">Microduck RL 课程 · 第 2 课 / 共 5 课</div>
+  <h1>跑通你的第一条训练管线</h1>
+  <div class="meta">实操课 · 约 40 分钟（其中 25 分钟挂机等待） · 前置：第 1 课</div>
+</header>
+
+<p>这节课你要亲手跑通完整闭环：代码测试 → GPU 门禁 → 训练 → 看曲线和动画。
+四条命令是每一位工程师的每日动线，跑通它们，你就"入职"了。</p>
+
+<div class="callout">
+  <span class="label">环境前提</span>
+  <code>source ~/robotics_env/bin/activate</code>（activate 已自动设置
+  <code>ONEAPI_DEVICE_SELECTOR=level_zero:0</code>，把 JAX 锁到 A380 独显），
+  然后 <code>cd ~/src/github.com/pollen-robotics/microduck_rl</code>。
+  验证：<code>python3 -c "import jax; print(jax.devices())"</code> 应输出
+  <code>[OneapiDevice(id=0)]</code>。
+</div>
+
+<h2>① 代码冒烟：30 秒，不动 GPU</h2>
+<pre><span class="cmd">JAX_PLATFORMS=cpu python3 tests/test_brax_env_cpu.py</span></pre>
+<p>7 个测试锁定环境的核心契约：61 维观测、奖励有限、摔倒判定、命令块零填充、
+MJX 变体 XML 配置。<b>从今天起养成纪律：改了任何环境代码，先跑它。</b>
+这和你写后端代码先跑单元测试是同一件事——它把"改挂了"的发现时间从
+半小时的 GPU 训练压缩到 30 秒。</p>
+
+<h2>② GPU 门禁：1 分钟，验证硬件链路</h2>
+<pre><span class="cmd">python3 test_biped_mjx_batch.py 32 20 0 0</span></pre>
+<p>32 只鸭子各步进 20 次，期望打印 <code>吞吐量 (FPS): 75 左右</code>。
+它的意义：<b>把"物理仿真层"和"训练层"解耦验证</b>。如果这步挂了，
+问题在 GPU/配置；如果这步通了而训练挂了，问题在训练代码。二分定位。</p>
+
+<h2>③ 训练冒烟：挂机 25 分钟</h2>
+<pre><span class="cmd">nohup python3 train_microduck_brax.py --num-timesteps 4096 \
+    --episode-length 100 --num-evals 3 --out-dir runs/my_smoke \
+    &gt; runs_my_smoke.log 2&gt;&amp;1 &amp;</span>
+<span class="cmd">tail -f runs_my_smoke.log</span>   <span class="cmt"># 跟踪进度，Ctrl+C 退出跟踪不影响训练</span></pre>
+<p>前约 4 分钟是编译 + 首次评估，之后每几分钟打印一行 eval。4096 步练不出
+走路（那需要几十万步），但足以验证<b>每个环节都在产出</b>。参考结果：
+三次 eval 奖励 6.6 → 6.4 → 7.8（我们的冒烟实测），最后一个 checkpoint 的
+rollout 撑 21 步后摔倒——正常，它还是个"婴儿"。</p>
+
+<h2>④ 看结果</h2>
+<pre><span class="cmd">column -s, -t runs/my_smoke/training_log.csv | less -S</span>   <span class="cmt"># 曲线数据</span>
+<span class="cmd">python3 rollout_microduck.py --replay runs/my_smoke/rollout_final.npz</span></pre>
+<p>GIF 会出现在 runs 目录里。<code>--replay</code> 模式不需要 GPU、不需要
+JAX，纯 CPU 秒出——所以你可以在任何机器上向别人展示成果。</p>
+
+<h2>自检清单</h2>
+<p>每完成一步勾一项；勾不上时对照"期望输出"找差异，找不到就问老师。</p>
+<ul class="checklist">
+  <li><input type="checkbox">① CPU 测试输出 <code>7/7 passed</code>
+    <span class="expect">最后一行：7/7 passed</span></li>
+  <li><input type="checkbox">② GPU 门禁输出 🎉 且 FPS 在 60–95 之间
+    <span class="expect">🔥 Intel Arc A380 双足仿真吞吐量 (FPS): ~75 帧/秒</span></li>
+  <li><input type="checkbox">③ 训练日志出现至少 3 行 [eval]
+    <span class="expect">[eval] steps=5120 wall=1396.3s episode_reward=7.800 …</span></li>
+  <li><input type="checkbox">④ runs/my_smoke/ 里有 7 个文件
+    <span class="expect">params.pkl params_step*.pkl×3 rollout_final.npz summary.json training_log.csv</span></li>
+  <li><input type="checkbox">⑤ GIF 里能看到鸭子的 3D 回放
+    <span class="expect">画面应有：棋盘地板 + 橙白配色的小鸭子 + 天空</span></li>
+</ul>
+
+<div class="quiz" data-answer="c">
+  <span class="qno">测验 1 / 3</span>
+  <p class="q">训练进程突然消失，日志末尾是 EXIT=139 且此前有 rematerialization 警告。第一步做什么？</p>
+  <div class="opts">
+    <button data-k="a">重装驱动并重配整个运行的环境</button>
+    <button data-k="b">把网络隐层宽度减半再重新训练</button>
+    <button data-k="c">减小并行环境数后立刻重跑一次</button>
+  </div>
+  <div class="explain" data-good="139 = 段错误，在本机几乎总是显存爆掉（XLA 工作集超过 ~4 GB 预算）。32 是安全值，40 是极限。"
+       data-bad="提示：这个症状在本机有明确的头号嫌疑——批量太大撑爆 6 GB 显存，与环境安装和网络大小无关。">
+    <span class="ref">出处：<a href="../reference/command-cheatsheet.html">命令速查卡 · 故障速诊</a> · 指南 §8 性能账本</span>
+  </div>
+</div>
+
+<div class="quiz" data-answer="b">
+  <span class="qno">测验 2 / 3</span>
+  <p class="q">你刚改了 microduck_brax_env.py 里的一个奖励权重。接下来第一件事？</p>
+  <div class="opts">
+    <button data-k="a">直接启动一整晚的大规模训练</button>
+    <button data-k="b">先跑三十秒测试再考虑上显卡</button>
+    <button data-k="c">先看上一轮训练的回放找灵感</button>
+  </div>
+  <div class="explain" data-good="30 秒的 CPU 测试锁定观测维度、奖励有限性等契约；改动破坏契约时，它把发现成本从『半小时 GPU + 报错难读』降到『30 秒 + 明确断言』。"
+       data-bad="提示：未经测试的改动直接上 GPU，是最贵的验证方式——这正是我们把 7 个契约测试放进 CPU 套件的原因。">
+    <span class="ref">出处：本课第 ① 节 · <code>tests/test_brax_env_cpu.py</code> 注释</span>
+  </div>
+</div>
+
+<div class="quiz" data-answer="a">
+  <span class="qno">测验 3 / 3</span>
+  <p class="q">第一次运行任何训练命令时，卡在某一步好几分钟不动。最可能的原因？</p>
+  <div class="opts">
+    <button data-k="a">编译器正在生成硬件码属正常</button>
+    <button data-k="b">鸭子模型网格太大加载不过来</button>
+    <button data-k="c">网络断连无法下载依赖和权重</button>
+  </div>
+  <div class="explain" data-good="JAX/XLA 把整个『物理步进+奖励+网络』编译成 GPU 机器码，本机首编译 10 秒到几分钟都有。用 tail -f 看日志，耐心等。"
+       data-bad="提示：模型网格在 put_model 时就加载完了（秒级）；整个训练完全本地运行，无网络依赖。卡住的是编译。">
+    <span class="ref">出处：第 1 课数据流图 · <a href="https://jax.readthedocs.io/en/latest/jax.html#compilation-jit">JAX jit 文档</a></span>
+  </div>
+</div>
+
+<h2>主推资源</h2>
+<p>本课操作细节的<b>权威出处</b>就是仓库自己的
+<a href="../../docs/intel_arc_a380_guide.md">《A380 本地开发指南》</a>（§3 十分钟上手、
+§10 故障排查表），以及 Brax 官方的
+<a href="https://github.com/google/brax/blob/main/notebooks/training.ipynb">training notebook</a>
+（我们封装的 <code>train_microduck_brax.py</code> 就是对它的工程化）。
+打印一张 <a href="../reference/command-cheatsheet.html">命令速查卡</a>，后面每天都用。</p>
+
+<div class="callout warn">
+  <span class="label">常见新手弯路</span>
+  不要为了"练快一点"把 <code>--num-timesteps</code> 拉到几十万就下班——
+  先保证一次 4096 步的冒烟全绿，再谈加大。管线没验证过的大训练，
+  挂 8 小时后给你一个报错，是本课最贵的失败方式。
+</div>
+
+<div class="ask-teacher">
+  💬 <b>卡住了？</b>把日志最后 20 行贴给我，我来定位。跑通了？告诉我
+  eval 奖励是多少——我想知道你的鸭子活了几步。
+</div>
+
+<nav class="lesson-nav">
+  <a href="0001-what-is-robot-rl.html">← 第一课</a>
+  <a href="../reference/command-cheatsheet.html">命令速查卡</a>
+</nav>
+</body>
+</html>

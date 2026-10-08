@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Microduck RL 课程 · 课程总览</title>
+<link rel="stylesheet" href="assets/course.css">
+</head>
+<body>
+<header class="course">
+  <div class="kicker">Tutorial · 新工程师入职课</div>
+  <h1>教一只双足小鸭子学走路</h1>
+  <div class="meta">5 课 · 中文 · 无机器人学基础要求 · 硬件：Intel Arc A380 · 全部命令已在本机验证</div>
+</header>
+
+<p>这是 Microduck 双足机器人强化学习平台的入职课程。你将从零开始，
+在这台 A380 工作站上亲手跑通"训练一只虚拟双足机器人"的完整闭环，
+并建立改奖励、读曲线、查故障的工程直觉。开始前 30 秒环境自检：</p>
+<pre>source ~/robotics_env/bin/activate        <span class="cmt"># 自动带 ONEAPI_DEVICE_SELECTOR</span>
+cd ~/src/github.com/pollen-robotics/microduck_rl
+python3 -c "import jax; print(jax.devices())"   <span class="cmt"># 期望: [OneapiDevice(id=0)]</span></pre>
+
+<h2>课程地图</h2>
+<table>
+<tr><th>#</th><th>课</th><th>类型 / 时长</th><th>你将获得</th></tr>
+<tr><td>1</td><td><a href="lessons/0001-what-is-robot-rl.html">会走路的小鸭子是怎么炼成的</a></td><td>概念 · 15 分钟</td><td>RL 训练机器人的心智模型 + 亲眼看一次训练成果</td></tr>
+<tr><td>2</td><td><a href="lessons/0002-first-training-run.html">跑通你的第一条训练管线</a></td><td>实操 · 40 分钟</td><td>四条日常命令 + 自检清单全绿（入职仪式）</td></tr>
+<tr><td>3</td><td><a href="lessons/0003-observations-actions.html">解剖 61 维观测与 14 维动作</a></td><td>走读 · 20 分钟</td><td>可点击的观测探索器 + 帧语义雷达（最易埋雷处）</td></tr>
+<tr><td>4</td><td><a href="lessons/0004-reward-engineering.html">奖励工程：一次只改一件事</a></td><td>实验 · 一晚</td><td>五连实验的设计方法 + 你的第一份预测判卷</td></tr>
+<tr><td>5</td><td><a href="lessons/0005-reading-curves.html">读曲线、抓病灶</a></td><td>诊断 · 20 分钟</td><td>用真实冒烟数据学会五种病灶的诊断</td></tr>
+</table>
+
+<h2>随堂参考（打印友好）</h2>
+<ul>
+<li><a href="reference/glossary.html">术语表</a> —— 全课程统一口径</li>
+<li><a href="reference/command-cheatsheet.html">命令速查卡</a> —— 日常四连 + 时长预算 + 故障速诊</li>
+<li><a href="reference/obs-layout.html">观测与动作布局速查</a> —— 61 维逐段对照（含帧语义铁律）</li>
+<li><a href="reference/reward-rules.html">奖励设计八诫</a> —— 官方血泪教训压缩版</li>
+<li><a href="docs/intel_arc_a380_guide.md">完整开发指南（仓库 docs/）</a></li>
+</ul>
+
+<h2>结业判据（MISSION.md 全文）</h2>
+<ol>
+<li>独立跑通四条命令，并解释每条在做什么</li>
+<li>对着 <code>microduck_brax_env.py</code> 逐段说出观测/动作/奖励的含义</li>
+<li>设计并执行一个单变量奖励实验，先写预测再验证</li>
+<li>拿到一份 training_log.csv 能判断训练健康度并定位常见病灶</li>
+</ol>
+
+<div class="ask-teacher">
+  💬 <b>agent 是你的老师。</b>课程中任何不懂的词、跑不通的命令、想抬杠的
+  观点，直接在会话里问。第 5 课结业后还有毕业作业：一次 10 万步过夜训练
+  的曲线门诊。
+</div>
+
+<p style="font-size:.85rem;color:var(--muted)">
+诚实声明：本地环境是教学版（PD 执行器、零域随机化、盒脚碰撞）。这里学的
+流程与直觉可以迁移，但本地练出的策略不能直接部署到真机——sim2real 请走
+官方管线（AGENTS.md / docs/intel_arc_a380_guide.md §9）。</p>
+</body>
+</html>

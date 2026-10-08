@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第三课 · 解剖 61 维观测与 14 维动作</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/quiz.js" defer></script>
+<script src="../assets/obs-explorer.js" defer></script>
+</head>
+<body>
+<header class="course">
+  <div class="kicker">Microduck RL 课程 · 第 3 课 / 共 5 课</div>
+  <h1>解剖 61 维观测与 14 维动作</h1>
+  <div class="meta">代码走读 + 交互 · 约 20 分钟 · 前置：第 2 课已跑通管线</div>
+</header>
+
+<p>上一课你把整条管线跑通了；这一课打开引擎盖：策略每 20 毫秒看到的 61 个
+数字到底是什么、从哪来、哪个坐标下。学完你能对着
+<code>microduck_brax_env.py</code> 的 <code>_get_obs</code> 逐段说出物理含义——
+这是第 4 课改奖励、第 5 课读曲线的共同基础。</p>
+
+<h2>点我看一遍 61 维</h2>
+<p>下面每一格是观测的一个维度，<b>点击任意一格</b>看它的来源和含义：</p>
+<div class="obs-explorer" data-panel="obs-info"></div>
+<div class="obs-panel" id="obs-info">👆 点击任意一格，这里会显示该维度的来源与物理含义</div>
+<p style="font-size:.85rem;color:var(--muted)">完整对照表（含关节顺序与摔倒阈值）：
+<a href="../reference/obs-layout.html">观测与动作布局速查</a>，建议开着对照读代码。</p>
+
+<h2>坐标系：最容易埋雷的地方</h2>
+<p>同一组数字，在不同坐标系里含义完全不同。本环境有两处<b>已实测锁定</b>的帧语义：</p>
+<table>
+<tr><th>量</th><th>坐标系</th><th>怎么验证的（本机 CPU 实测）</th></tr>
+<tr><td>自由关节 qvel[0:3]</td><td><b>世界系</b>线速度</td><td>设 qvel[0]=0.5 → x 前进 1 mm、姿态不动</td></tr>
+<tr><td>自由关节 qvel[3:6]</td><td><b>机体系</b>角速度</td><td>躯干 yaw 90° 后设 qvel[4]=0.5，陀螺仪读 (0,0.5,0) 而非换轴后的 (0.5,0,0)</td></tr>
+</table>
+<p>为什么较真：观测的 <code>base_ang_vel</code>、奖励的速度跟踪、摔倒判定的
+重力投影，各自选了不同的坐标系——<b>是设计使然，不是随手写的</b>。你以后写
+任何新的观测/奖励项，第一件事是问"这个向量在哪个系"。混用坐标系是隐性 bug：
+代码不报错、训练能跑，只是策略学得莫名其妙。</p>
+
+<h2>动作：不是力矩，是"站姿 ± 0.5 弧度"</h2>
+<pre><span class="cmt"># microduck_brax_env.py · step()</span>
+act = jp.clip(action, -1.0, 1.0)          <span class="cmt"># 网络输出裁剪到 [-1,1]</span>
+target = self._ctrl0 + ACTION_SCALE * act  <span class="cmt"># STAND 站姿 ± 0.5 rad 的目标角</span>
+<span class="cmt"># 之后 10 个物理步里，kp=50 的位置伺服追这个目标角</span></pre>
+<p>三个设计决定，各有理由：<b>裁剪</b>防止网络输出离谱值；<b>相对站姿偏移</b>
+让"动作 = 0"就是站好（网络从站姿开始探索，而不是从随机姿势）；<b>位置伺服
+而非力矩</b>是 XL330 舵机的真实工作方式——真机也是发目标角。</p>
+
+<h2>零填充的槽：为未来留的插座</h2>
+<p>命令块的 13 维里只有 vx 在用，其余 10 维恒为零但<b>永远保留</b>。这来自
+官方家族契约：所有策略共享同一个观测布局，将来加"抬头/蹲下"等技能时，新任务
+直接把数填进这些槽，<b>老策略可以在运行时热插拔替换</b>。删槽 = 掐断家族的
+兼容性，所以它是 CPU 测试锁定的契约之一（<code>test_step_finite_and_command_block_padded</code>）。</p>
+
+<div class="quiz" data-answer="a">
+  <span class="qno">测验 1 / 3</span>
+  <p class="q">自由关节速度向量 qvel 的坐标系语义是？</p>
+  <div class="opts">
+    <button data-k="a">线速度世界系角速度机体系</button>
+    <button data-k="b">线速度机体系角速度世界系</button>
+    <button data-k="c">两者都表达在世界坐标系里</button>
+  </div>
+  <div class="explain" data-good="实测：设 qvel[0]=0.5 鸭子在世界系里平移；躯干偏航 90° 后设 qvel[4]=0.5，机身陀螺仪读数不变轴——说明角速度在机体系。"
+       data-bad="提示：本机 CPU 实验表明平移分量沿世界 x 移动鸭子；而角速度与机身陀螺仪同帧。">
+    <span class="ref">出处：MuJoCo 文档 freejoint 章节 · <a href="../reference/obs-layout.html">布局速查 · 帧语义铁律</a></span>
+  </div>
+</div>
+
+<div class="quiz" data-answer="a">
+  <span class="qno">测验 2 / 3</span>
+  <p class="q">摔倒判定为什么除了躯干高度还要看重力投影？</p>
+  <div class="opts">
+    <button data-k="a">高度正常也可能已经大幅倾斜</button>
+    <button data-k="b">高度传感器在实际中噪声更大</button>
+    <button data-k="c">高度数据在仿真中获取成本高</button>
+  </div>
+  <div class="explain" data-good="身高和倾斜是两个独立的自由度：靠墙、卡住、被扶住时高度可能不低但早已翻倒。重力投影直接量『身体歪了多少』，是更本质的摔倒信号。"
+       data-bad="提示：仿真里高度获取零成本；两个判据的差别在几何含义不同，不在噪声或成本。">
+    <span class="ref">出处：<a href="../reference/obs-layout.html">布局速查 · 摔倒判定</a> · microduck_brax_env.py 常量 FALL_Z / TILT_PROJ_Z</span>
+  </div>
+</div>
+
+<div class="quiz" data-answer="a">
+  <span class="qno">测验 3 / 3</span>
+  <p class="q">网络输出的某个动作从 −1 变到 +1，对应关节发生了什么？</p>
+  <div class="opts">
+    <button data-k="a">在站姿基础上偏移零点五弧度</button>
+    <button data-k="b">在零到满力矩之间线性地缩放</button>
+    <button data-k="c">直接写成舵机的原始控制量值</button>
+  </div>
+  <div class="explain" data-good="target = STAND_ctrl + 0.5·clip(action)：动作是相对站姿的目标角偏移，最终由位置伺服追——跟真机发目标角的方式一致。"
+       data-bad="提示：动作不直接是力矩（那是力矩控制），也不直接是绝对角——它是『站在标准姿势上，往哪边偏多少弧度』。">
+    <span class="ref">出处：本页动作节 · <a href="../reference/obs-layout.html">布局速查 · 动作映射</a></span>
+  </div>
+</div>
+
+<div class="win">
+  <span class="label">本课的动手赢面（3 分钟）：解剖一只真实的观测</span>
+  <pre>JAX_PLATFORMS=cpu python3 - &lt;&lt;'EOF'
+from microduck_brax_env import MicroduckWalkEnv
+import jax, numpy as np
+env = MicroduckWalkEnv()
+obs = np.asarray(env.reset(jax.random.PRNGKey(0)).obs)
+for name, a, b in [("joint_pos",0,14),("joint_vel",14,28),
+                   ("base_ang_vel",28,31),("proj_grav",31,34),
+                   ("last_action",34,48),("command",48,61)]:
+    print(f"{name:12s} obs[{a:2d}:{b:2d}] = {np.round(obs[a:b],3)}")
+EOF</pre>
+  <p style="margin:.4rem 0 0">自检三个数：<code>proj_grav</code> 应接近 (0,0,−1)；
+  <code>command</code> 第一位是 0~0.6 的随机速度、其余为零；
+  <code>joint_pos</code> 是 ±0.03 内的小噪声。<b>对上了，说明你正在读一只
+  站在起跑线上的鸭子的大脑输入。</b></p>
+</div>
+
+<h2>主推资源</h2>
+<p>坐标系与传感器的<b>权威出处</b>：
+<a href="https://mujoco.readthedocs.io/en/stable/programming/visualization.html?highlight=frame#coordinate-conventions">MuJoCo 文档 · 坐标约定</a>；
+观测设计的工程视角读仓库 <code>AGENTS.md</code> 的"Commands, observations, dead weights"一节
+（"从不为非零的命令输入留死权重"就是这个零填充契约的出处）。</p>
+
+<div class="ask-teacher">
+  💬 <b>我是你的老师。</b>想让我逐行讲 <code>_get_obs</code> 的四元数数学？
+  想知道为什么重力投影选 −1 而不是 +1？直接问。读完了告诉我，我们进第 4 课
+  开始改奖励。
+</div>
+
+<nav class="lesson-nav">
+  <a href="0002-first-training-run.html">← 第二课</a>
+  <a href="0004-reward-engineering.html">下一课：奖励工程 →</a>
+</nav>
+</body>
+</html>

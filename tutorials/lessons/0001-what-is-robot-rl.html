@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第一课 · 会走路的小鸭子是怎么炼成的</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/quiz.js" defer></script>
+</head>
+<body>
+<header class="course">
+  <div class="kicker">Microduck RL 课程 · 第 1 课 / 共 5 课</div>
+  <h1>会走路的小鸭子是怎么炼成的</h1>
+  <div class="meta">概念课 · 约 15 分钟 · 无需任何机器人学基础</div>
+</header>
+
+<p>你即将接手的项目，是教一台 <b>25 厘米高、800 克重</b>的双足机器人——
+Microduck（小黄鸭）——用强化学习学会走路。它有 <b>14 个舵机</b>（腿部 10 个、
+脖子和头 4 个），跑在一块 Intel Arc A380 显卡上的物理仿真里。
+这节课不写代码：你只需要建立正确的心智模型，并<b>亲眼看到一次训练成果</b>。</p>
+
+<h2>一句话原理</h2>
+<p>同时让 <b>32 只虚拟鸭子</b>随机乱动：往前走、不摔倒的动作<b>加分</b>，
+摔倒、抽搐的动作<b>减分</b>。一个神经网络（<b>策略</b>）每 20 毫秒看一眼传感器
+数据（<b>观测</b>），决定 14 个关节各使多大劲（<b>动作</b>）。训练算法
+（<b>PPO</b>）不断微调网络参数，让总分越来越高——几万步之后，乱抖的鸭子
+开始试着站稳，几十万步之后，它小步往前挪。</p>
+
+<div class="flow">
+策略网络 → 动作(14 关节) → <b>物理仿真步进 10 小步</b>(0.02 s) → 新观测(61 维) + 奖励 → 回到策略网络 ♻️
+</div>
+<p style="font-size:.85rem;color:var(--muted)">这个 50 Hz 的循环每秒要跑几千次（32 只鸭子并行），
+所以整个物理和网络都被 JAX/XLA 编译成 GPU 机器码——这也是你第一次运行时
+"卡住几分钟"的原因：那是在编译，不是死机。</p>
+
+<h2>三个必须建立的第一直觉</h2>
+
+<h3>直觉一：观测是"传感器的数值"，不是图片</h3>
+<p>鸭子的策略看的是一个 <b>61 维数字向量</b>：14 个关节角度、14 个关节速度、
+躯干角速度、一个叫 <b>重力投影</b> 的三维向量（世界重力方向投影到机身坐标，
+直立时 = (0,0,-1)，相当于内置倾斜计）、上一步动作，以及 13 维指令
+（想要它走多快）。没有摄像头——纯本体感知。</p>
+
+<h3>直觉二：奖励定义了"什么叫会走路"，一个字都不能含糊</h3>
+<p>本环境的奖励 = <b>速度跟踪分</b>（实际前进速度接近指令就给，高斯形状）
++ <b>活着奖励 0.25</b> + 微小的动作平滑惩罚。奖励写得不严谨，网络就会钻空子
+（官方仓库称之为 reward hacking，血泪教训见
+<a href="https://spinningup.openai.com/zh_CN/latest/spinningup/rl_intro.html">Spinning Up · RL 入门</a>第 3 节）。
+以后你会看到一条铁律：<b>日志里任何惩罚项的平均值必须 ≤ 0</b>，否则说明
+配置写反了——把惩罚写成了奖励。</p>
+
+<h3>直觉三：仿真≠现实，而且差距是系统性的</h3>
+<p>本地环境为了在 6 GB 显存上跑得动，用了真实鸭子的简化版：脚掌碰撞体从
+7900 顶点的网格换成了等尺寸盒子，执行器用的是简化 PD 模型而非官方的
+BAM 电压模型，且没有做"域随机化"（训练时故意随机扰动摩擦、质量）。
+所以：<b>本地练出的策略用于学习流程，绝不能直接刷进真机</b>。
+官方的 sim2real 管线见仓库 <code>AGENTS.md</code>。</p>
+
+<div class="quiz" data-answer="b">
+  <span class="qno">测验 1 / 3</span>
+  <p class="q">在这只鸭子的训练里，"策略（policy）"指的是什么？</p>
+  <div class="opts">
+    <button data-k="a">定义质量关节和碰撞体的模型</button>
+    <button data-k="b">读入观测输出动作的神经网络</button>
+    <button data-k="c">给状态动作打分的价值函数组</button>
+  </div>
+  <div class="explain" data-good="策略就是那个最终被部署到机器人身上的网络，checkpoint 保存的就是它。"
+       data-bad="提示：策略是训练的最终产物——被保存、被部署的那个网络。XML 是物理描述，价值函数只是 PPO 的内部配角。">
+    <span class="ref">出处：<a href="https://spinningup.openai.com/zh_CN/latest/spinningup/rl_intro.html#policy">Spinning Up · RL 入门 · Policies</a> · <a href="../reference/glossary.html">术语表</a></span>
+  </div>
+</div>
+
+<div class="quiz" data-answer="c">
+  <span class="qno">测验 2 / 3</span>
+  <p class="q">61 维观测里的"重力投影"维，对策略来说相当于什么？</p>
+  <div class="opts">
+    <button data-k="a">测量电池剩余电量的电压读数</button>
+    <button data-k="b">指示脚底是否触地的接触信号</button>
+    <button data-k="c">告知身体倾斜角的内置倾斜计</button>
+  </div>
+  <div class="explain" data-good="直立时它恒等于 (0,0,-1)；身体往哪边歪，重力在这个方向上的分量就增大——策略靠它知道自己快摔了。"
+       data-bad="提示：它是世界重力方向投影到机身坐标系的三维向量——身体歪，它就变。">
+    <span class="ref">出处：MuJoCo 文档 frameconv 章节 · 本仓库 <code>_get_obs</code> · <a href="../reference/glossary.html">术语表</a></span>
+  </div>
+</div>
+
+<div class="quiz" data-answer="a">
+  <span class="qno">测验 3 / 3</span>
+  <p class="q">为什么训练时同时跑 32 只鸭子，而不是 1 只慢慢练？</p>
+  <div class="opts">
+    <button data-k="a">一次凑齐更多经验供算法来学习</button>
+    <button data-k="b">让鸭子互相比赛产生进步的动力</button>
+    <button data-k="c">减少显存占用提高每一帧的速度</button>
+  </div>
+  <div class="explain" data-good="PPO 是批量学习算法：一批经验算一次梯度。批量越大、经验越多样，更新越稳。单只鸭子还会让经验高度相关，学得又慢又偏。"
+       data-bad="提示：鸭子之间并不互相影响（各跑各的物理）；显存占用也随环境数增加而不是减少。">
+    <span class="ref">出处：<a href="https://github.com/google/brax">Brax</a> 的 vmap 并行设计 · <a href="https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap">JAX vmap 文档</a></span>
+  </div>
+</div>
+
+<div class="win">
+  <span class="label">本课的动手赢面（2 分钟）</span>
+  <p style="margin:.4rem 0 0">亲眼看看一只"练了 23 分钟"的鸭子长什么样——仓库里已经有一个
+  训练好的 checkpoint 和渲染好的动画：</p>
+  <pre>cd ~/src/github.com/pollen-robotics/microduck_rl
+ls runs/smoke/        # 曲线、checkpoint、rollout 都在
+xdg-open runs/smoke/rollout_final_view.gif</pre>
+  <p style="margin:.4rem 0 0;font-size:.9rem">你会看到它起步就往前栽——这只鸭子只练了 4096 步，
+  相当于人类的几分钟大。它会在之后的课程里被你亲手练大。</p>
+</div>
+
+<h2>主推资源</h2>
+<p>本课概念的<b>首选阅读</b>：OpenAI Spinning Up 的
+<a href="https://spinningup.openai.com/zh_CN/latest/spinningup/rl_intro.html">"RL 入门"第一部分</a>
+（有中文版，20 分钟，把策略/奖励/环境的语言体系一次讲清）。
+机器人视角的补充：DeepMind 的
+<a href="https://github.com/google-deepmind/mujoco_playground">mujoco_playground</a>，
+里面有很多小机器人用 MJX 训练的现成例子——本平台的"盒脚碰撞"做法就源自该生态。</p>
+
+<div class="ask-teacher">
+  💬 <b>我是你的老师。</b>任何看不懂的词、跑不通的命令、想抬杠的观点，
+  直接在会话里问我。课后我应该读什么、下一课学什么，也可以让我安排。
+</div>
+
+<nav class="lesson-nav">
+  <a href="../reference/glossary.html">术语表</a>
+  <a href="0002-first-training-run.html">下一课：跑通你的第一条训练管线 →</a>
+</nav>
+</body>
+</html>

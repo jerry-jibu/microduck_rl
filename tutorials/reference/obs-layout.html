@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>观测与动作布局速查 — Microduck RL 课程</title>
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<header class="course">
+  <div class="kicker">Reference · 速查</div>
+  <h1>61 维观测与 14 维动作布局</h1>
+  <div class="meta">与 microduck_brax_env.py 的 _get_obs / step 逐维对应 · 改观测必须同步本页 · <b>布局是家族契约，禁止单方面修改</b></div>
+</header>
+
+<h2>观测 obs[0:61]</h2>
+<table>
+<tr><th>区间</th><th>名称</th><th>维度</th><th>来源（帧语义）</th><th>站直时的典型值</th></tr>
+<tr><td><code>[0:14]</code></td><td>joint_pos</td><td>14</td><td><code>qpos[7:] − STAND</code>（弧度偏移）</td><td>≈ 0 ± 噪声(0.03)</td></tr>
+<tr><td><code>[14:28]</code></td><td>joint_vel</td><td>14</td><td><code>qvel[6:]</code></td><td>0</td></tr>
+<tr><td><code>[28:31]</code></td><td>base_ang_vel</td><td>3</td><td><code>qvel[3:6]</code> <b>机体系</b></td><td>0</td></tr>
+<tr><td><code>[31:34]</code></td><td>proj_grav</td><td>3</td><td>四元数逆旋转 [0,0,−1]</td><td>(0, 0, −1)</td></tr>
+<tr><td><code>[34:48]</code></td><td>last_action</td><td>14</td><td>上一步动作</td><td>0</td></tr>
+<tr><td><code>[48:51]</code></td><td>command twist</td><td>3</td><td>[vx, vy, wz]，vx 采样 U(0,0.6)</td><td>(vx, 0, 0)</td></tr>
+<tr><td><code>[51:55]</code></td><td>head_pose 槽</td><td>4</td><td><b>零填充占位</b></td><td>0</td></tr>
+<tr><td><code>[55:61]</code></td><td>body_pose 槽</td><td>6</td><td><b>零填充占位</b></td><td>0</td></tr>
+</table>
+
+<div class="callout warn">
+  <span class="label">铁律</span>
+  自由关节的帧语义（已在本机 CPU 实测并写进测试）：<code>qvel[0:3]</code> 是
+  <b>世界系</b>线速度，<code>qvel[3:6]</code> 是<b>机体系</b>角速度（与 imu site
+  陀螺仪同帧，site 四元数为单位阵）。任何观测/奖励计算混用这两套坐标系都是隐性 bug。
+</div>
+
+<h2>动作 action[0:14]（关节顺序）</h2>
+<pre>idx  0        1         2          3     4      |  5       6          7        8         |
+     left_hip_yaw left_hip_roll left_hip_pitch left_knee left_ankle  neck_pitch head_pitch head_yaw head_roll
+idx  9         10          11           12        13    |
+     right_hip_yaw right_hip_roll right_hip_pitch right_knee right_ankle</pre>
+<p>映射：<code>目标角 = STAND_ctrl + 0.5 · clip(action, −1, 1)</code>（弧度），
+由 kp=50 的位置伺服去追。<b>动作是相对站姿的偏移</b>，不是绝对角，也不是力矩。</p>
+
+<h2>摔倒判定（任一触发）</h2>
+<ul>
+<li>躯干高度 <code>qpos[2] &lt; 0.08</code> m（站直是 0.12——别用 0.12 当阈值！）</li>
+<li>重力投影 z &gt; −0.5（倾角 ≳ 60°）</li>
+</ul>
+
+<nav class="lesson-nav">
+  <a href="glossary.html">← 术语表</a>
+  <a href="reward-rules.html">奖励设计戒律 →</a>
+</nav>
+</body>
+</html>
