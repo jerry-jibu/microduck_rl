@@ -38,3 +38,7 @@ backup_onnx/
 logdir/.claude/
 logdir/
 logdir/.claude/worktrees/
+
+# Intel A380 track: regenerable training artifacts & logs
+runs/
+runs_*.log
