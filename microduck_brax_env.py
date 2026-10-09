@@ -27,6 +27,7 @@ stack, reward curriculum, mass/CoM DR, symmetry features.
 """
 
 import mujoco
+import numpy as np
 from mujoco import mjx
 
 from brax import base
@@ -73,7 +74,8 @@ class MicroduckWalkEnv(Env):
     """Forward-walking velocity task for the Microduck biped, Brax/MJX style."""
 
     def __init__(self, xml_path: str = DEFAULT_XML, reset_noise: float = 0.03,
-                 obs_noise: bool = True, action_delay: bool = True):
+                 obs_noise: bool = True, action_delay: bool = True,
+                 fall_states_path: str | None = None, spawn_pfall: float = 0.3):
         model = mujoco.MjModel.from_xml_path(xml_path)
         self._mjx_model = mjx.put_model(model)
 
@@ -92,6 +94,21 @@ class MicroduckWalkEnv(Env):
         self._reset_noise = reset_noise
         self._obs_noise = obs_noise
         self._action_delay = action_delay
+
+        # reverse curriculum (AGENTS.md: the reliable fix for "learns the start,
+        # never the last mile"): with prob spawn_pfall, reset spawns from a
+        # pre-fall state sampled from the library instead of the STAND pose —
+        # forcing practice of the recovery swing that falls otherwise never
+        # provide on-policy data for. Library states must be pre-termination
+        # (scripts/collect_fall_states.py filters them).
+        self._spawn_pfall = spawn_pfall if fall_states_path else 0.0
+        if fall_states_path:
+            lib = np.load(fall_states_path)
+            assert lib["qpos"].shape[1] == 21 and lib["qvel"].shape[1] == 20
+            self._lib_qpos = jp.asarray(lib["qpos"], dtype=jp.float32)
+            self._lib_qvel = jp.asarray(lib["qvel"], dtype=jp.float32)
+        else:
+            self._lib_qpos = None
 
     # -- brax Env contract ---------------------------------------------------
     @property
@@ -131,7 +148,8 @@ class MicroduckWalkEnv(Env):
 
     # -- API -------------------------------------------------------------------
     def reset(self, rng: jp.ndarray) -> State:
-        rng_xy, rng_quat, rng_joint, rng_cmd, rng_aux = jax.random.split(rng, 5)
+        rng_xy, rng_quat, rng_joint, rng_cmd, rng_aux, rng_spawn, rng_idx, rng_fvel = (
+            jax.random.split(rng, 8))
         qpos = self._qpos0
         qpos = qpos.at[0:3].add(jax.random.uniform(rng_xy, (3,), minval=-0.02, maxval=0.02))
         quat = self._qpos0[3:7] + jax.random.uniform(rng_quat, (4,), minval=-0.02, maxval=0.02)
@@ -139,7 +157,23 @@ class MicroduckWalkEnv(Env):
         qpos = qpos.at[7:].add(
             jax.random.uniform(rng_joint, (N_JOINTS,), minval=-self._reset_noise, maxval=self._reset_noise)
         )
-        data = self._init_data.replace(qpos=qpos, qvel=jp.zeros(20), ctrl=self._ctrl0)
+        qvel = jp.zeros(20)
+
+        # reverse curriculum: with prob spawn_pfall, be born mid-fall instead —
+        # small joint/velocity noise so repeated spawns of the same library
+        # state aren't identical
+        if self._lib_qpos is not None:
+            use_fall = jax.random.bernoulli(rng_spawn, self._spawn_pfall)
+            idx = jax.random.randint(rng_idx, (), 0, self._lib_qpos.shape[0])
+            fq = self._lib_qpos[idx]
+            fq = fq.at[7:].add(
+                jax.random.uniform(rng_joint, (N_JOINTS,), minval=-0.02, maxval=0.02))
+            fv = self._lib_qvel[idx].at[:].add(
+                jax.random.uniform(rng_fvel, (20,), minval=-0.02, maxval=0.02))
+            qpos = jp.where(use_fall, fq, qpos)
+            qvel = jp.where(use_fall, fv, qvel)
+
+        data = self._init_data.replace(qpos=qpos, qvel=qvel, ctrl=self._ctrl0)
 
         # command block: [vx, vy, wz] + head_pose(4) + body_pose(6) zero-padded.
         # vx ~ U(0, 0.6): includes near-zero so "stand" is trained for free.

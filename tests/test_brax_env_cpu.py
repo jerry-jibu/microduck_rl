@@ -144,6 +144,42 @@ def test_action_delay_defers_application():
         err_msg="ctrl did not reach the queued action after 8 steps")
 
 
+def test_fall_library_spawn(tmp_path=None):
+    """Reverse curriculum: pfall=1 must spawn from library states (never
+    STAND), pfall=0 must never leave STAND, and library spawns must stay
+    'alive' (above FALL_Z)."""
+    import tempfile
+    from pathlib import Path
+
+    from microduck_brax_env import FALL_Z, MicroduckWalkEnv as Env
+
+    lib_qpos = np.zeros((4, 21), dtype=np.float32)
+    lib_qpos[:, 2] = 0.105  # below STAND 0.12, above FALL_Z 0.08
+    lib_qpos[:, 3] = 1.0
+    lib_qpos[:, 7:] = 0.5   # distinctive: all joints 0.5 rad (STAND ankle ≈ −0.45)
+    lib_qvel = np.full((4, 20), 0.01, dtype=np.float32)
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "lib.npz"
+        np.savez(p, qpos=lib_qpos, qvel=lib_qvel)
+
+        env_fall = Env(XML, fall_states_path=str(p), spawn_pfall=1.0)
+        for seed in range(6):
+            s = env_fall.reset(jax.random.PRNGKey(seed))
+            q = np.asarray(s.pipeline_state.qpos)
+            assert abs(q[2] - 0.105) < 1e-4, \
+                "library spawn must keep the library trunk height verbatim"
+            assert np.all(q[7:] > 0.4), \
+                "library spawn must carry library joint angles (0.5 ± noise)"
+            assert bool(jp.all(jp.isfinite(s.obs))) and s.obs.shape == (61,)
+            # spawn must not instantly be past termination
+            assert float(s.done) == 0.0
+
+        env_std = Env(XML, fall_states_path=str(p), spawn_pfall=0.0)
+        s = env_std.reset(jax.random.PRNGKey(0))
+        assert np.asarray(s.pipeline_state.qpos)[20] < 0.0, \
+            "pfall=0 must keep standard STAND spawns (ankle is −0.45)"
+
+
 def test_standing_ctrl_holds_height_initially():
     """With STAND ctrl the trunk must not sink immediately (spawn is at 0.12)."""
     env = MicroduckWalkEnv(XML)
