@@ -64,6 +64,10 @@ def parse_args():
     p.add_argument("--fall-states", default="",
                    help="fall_states.npz from scripts/collect_fall_states.py — "
                         "enables reverse-curriculum spawns")
+    p.add_argument("--resume-params", default="",
+                   help="params.pkl to warm-start from (params[0..2]: "
+                        "normalizer, policy, value); phases restart the "
+                        "optimizer, so pair with --lr-phases")
     p.add_argument("--spawn-pfall", type=float, default=0.3,
                    help="probability a reset spawns from a pre-fall state")
     p.add_argument("--num-evals", type=int, default=5,
@@ -108,19 +112,21 @@ def main():
     rows = []
     offset = [0]  # cumulative steps from earlier phases
 
+    # growing key set across phases (phase 2+ emit training/* metrics) —
+    # DictWriter must see the full union or writes raise on new fields
+    def write_csv():
+        keys = sorted(set().union(*(r.keys() for r in rows)))
+        with open(out / "training_log.csv", "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=keys)
+            w.writeheader()
+            w.writerows(rows)
+
     def progress_fn(num_steps, metrics):
         # metrics: dict of scalar jnp arrays (eval/... and train/...)
         flat = {k: float(v) for k, v in metrics.items() if hasattr(v, "item")}
         row = {"num_steps": num_steps + offset[0], "wall_s": round(time.time() - T0, 1), **flat}
         rows.append(row)
-        if rows and len(rows) > 1:
-            keys = rows[0].keys() | row.keys()
-        else:
-            keys = row.keys()
-        with open(out / "training_log.csv", "w", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=sorted(keys))
-            w.writeheader()
-            w.writerows(rows)
+        write_csv()
         er = flat.get("eval/episode_reward", float("nan"))
         el = flat.get("eval/episode_length", float("nan"))
         print(f"[eval] steps={num_steps + offset[0]} wall={row['wall_s']}s "
@@ -134,6 +140,10 @@ def main():
     T0 = time.time()
     params = None
     make_policy = None
+    if args.resume_params:
+        with open(args.resume_params, "rb") as f:
+            params = pickle.load(f)
+        print(f"warm-started from {args.resume_params}", flush=True)
     for i, (steps, lr) in enumerate(phases):
         print(f"=== phase {i + 1}/{len(phases)}: {steps} steps @ lr {lr} "
               f"(layers {layers}) ===", flush=True)
