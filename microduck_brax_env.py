@@ -75,7 +75,8 @@ class MicroduckWalkEnv(Env):
 
     def __init__(self, xml_path: str = DEFAULT_XML, reset_noise: float = 0.03,
                  obs_noise: bool = True, action_delay: bool = True,
-                 fall_states_path: str | None = None, spawn_pfall: float = 0.3):
+                 fall_states_path: str | None = None, spawn_pfall: float = 0.3,
+                 alive_only: bool = False):
         model = mujoco.MjModel.from_xml_path(xml_path)
         self._mjx_model = mjx.put_model(model)
 
@@ -94,6 +95,7 @@ class MicroduckWalkEnv(Env):
         self._reset_noise = reset_noise
         self._obs_noise = obs_noise
         self._action_delay = action_delay
+        self._alive_only = alive_only  # diagnosis switch: reward = alive only
 
         # reverse curriculum (AGENTS.md: the reliable fix for "learns the start,
         # never the last mile"): with prob spawn_pfall, reset spawns from a
@@ -219,6 +221,8 @@ class MicroduckWalkEnv(Env):
 
         vx = data.qvel[0]  # world-frame forward speed (robot faces +x)
         r_tracking = jp.exp(-jp.square((vx - command[0]) / TRACK_STD))
+        if self._alive_only:
+            r_tracking = jp.zeros(())
         r_alive = jp.float32(ALIVE_BONUS)
         r_action_rate = -ACTION_RATE_WEIGHT * jp.sum(jp.square(act - last_action))
         reward = r_tracking + r_alive + r_action_rate

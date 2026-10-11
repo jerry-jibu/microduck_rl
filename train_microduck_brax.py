@@ -70,6 +70,8 @@ def parse_args():
                         "optimizer, so pair with --lr-phases")
     p.add_argument("--spawn-pfall", type=float, default=0.3,
                    help="probability a reset spawns from a pre-fall state")
+    p.add_argument("--alive-only", action="store_true",
+                   help="diagnosis: drop the velocity-tracking reward, keep alive only")
     p.add_argument("--num-evals", type=int, default=5,
                    help="evaluations during training (each eval costs env steps!)")
     p.add_argument("--num-eval-envs", type=int, default=8)
@@ -90,7 +92,8 @@ def main():
     print(f"config: {vars(args)}")
 
     env = MicroduckWalkEnv(fall_states_path=args.fall_states or None,
-                           spawn_pfall=args.spawn_pfall)
+                           spawn_pfall=args.spawn_pfall,
+                           alive_only=args.alive_only)
     print(f"env: obs={env.observation_size} action={env.action_size} (50 Hz policy)"
           + (f", reverse-curriculum p={args.spawn_pfall}" if args.fall_states else ""))
 
